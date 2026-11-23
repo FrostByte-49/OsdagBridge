@@ -119,6 +119,19 @@ from osdagbridge.core.utils.common import (
 )
 
 from osdagbridge.core.reports.report_utils import _tex
+from osdagbridge.core.reports.plot_utils import (
+    generate_ur_summary_chart,
+    generate_material_takeoff_charts,
+)
+from osdagbridge.core.reports.styles import (
+    get_caption_setup,
+    get_geometry_latex,
+    get_color_definitions,
+    TABLE_ARRAYSTRETCH,
+    TABLE_TABCOLSEP,
+    TABLE_EXTRAROWHEIGHT,
+    TABLE_ARRAYRULEWIDTH
+)
 from .executive_summary import executive_summary
 from .chap1 import ch1_project_info
 from .chap2 import ch2_input_parameters
@@ -156,11 +169,11 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 \documentclass[12pt,a4paper]{report}
 
 % Packages
-\usepackage[a4paper, margin=1in]{geometry}
+""" + get_geometry_latex() + r"""
+\usepackage[T1]{fontenc}
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{amssymb}
-\usepackage{booktabs}
 \usepackage{array}
 \usepackage{tabularx}
 \usepackage{float}
@@ -169,44 +182,35 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 \usepackage{xcolor}
 \usepackage{setspace}
 \usepackage{enumitem}
-\usepackage{caption}
-
-\captionsetup{
-    labelfont=bf,
-    justification=raggedright,
-    singlelinecheck=false,
-    format=plain
-}
+""" + get_caption_setup() + r"""
 \usepackage{subcaption}
 \usepackage{multirow}
 \usepackage{colortbl}
+\usepackage{hhline}
 \usepackage{longtable}
-\setlength{\LTleft}{\fill}
-\setlength{\LTright}{\fill}
+\newlength{\usablew}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
 \usepackage{titlesec}
 \usepackage{titletoc}
 \usepackage{lastpage}
 \usepackage{makecell}
 \usepackage{etoolbox}
 \usepackage{needspace}
+\usepackage[section]{placeins}
 
 \numberwithin{table}{chapter}
 \numberwithin{figure}{chapter}
 % Table layout and spacing: consistent padding, row height, and longtable pre/post skips
-\setlength{\tabcolsep}{6pt}
-\renewcommand{\arraystretch}{1.12}
+\setlength{\tabcolsep}{""" + TABLE_TABCOLSEP + r"""}
+\renewcommand{\arraystretch}{""" + str(TABLE_ARRAYSTRETCH) + r"""}
 \setlength{\LTpre}{0pt}
 \setlength{\LTpost}{6pt}
-% Table rules (outline thickness) and small extra row height for clarity
-\setlength{\arrayrulewidth}{0.5pt}
-\setlength{\extrarowheight}{0.6pt}
+% Table rules (outline thickness) and extra row height for clarity
+\setlength{\arrayrulewidth}{""" + TABLE_ARRAYRULEWIDTH + r"""}
+\setlength{\extrarowheight}{""" + TABLE_EXTRAROWHEIGHT + r"""}
 
-% Prevent tables from overflowing past the page bottom:
-% if fewer than 5 baseline-skips remain, break to the next page first.
-\BeforeBeginEnvironment{table}{\needspace{5\baselineskip}}
-\BeforeBeginEnvironment{longtable}{\needspace{5\baselineskip}}
-
-\definecolor{osdagGreen}{HTML}{91B014}
+""" + get_color_definitions() + r"""
 
 \fancypagestyle{main}{
   \fancyhf{}
@@ -214,14 +218,18 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
   \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
   \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
   \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}
+  \renewcommand{\headrule}{%
+    \ifnum\value{page}>1\relax
+      {\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}%
+    \fi
+  }
   \renewcommand{\footrule}{%
     \ifbool{hasSDonPage}{%
-      \vspace{-20pt}%
+      \vspace{-10pt}%
       \hbox to \headwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
-      \vspace{4pt}%
+      \vspace{2pt}%
     }{%
-      \vspace{-8pt}%
+      \vspace{-4pt}%
     }%
     \color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}%
   }
@@ -232,14 +240,18 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
   \fancyhead[R]{""" + rd + r""" $|$ """ + rv + r"""}
   \fancyfoot[L]{Osdag $|$ FOSSEE $|$ Indian Institute of Technology Bombay}
   \fancyfoot[R]{Page \thepage\ of \pageref{LastPage}}
-  \renewcommand{\headrule}{\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}
+  \renewcommand{\headrule}{%
+    \ifnum\value{page}>1\relax
+      {\color{osdagGreen}\hrule width\headwidth height 1pt \vspace{2pt}}%
+    \fi
+  }
   \renewcommand{\footrule}{%
     \ifbool{hasSDonPage}{%
-      \vspace{-20pt}%
+      \vspace{-10pt}%
       \hbox to \headwidth{\textcolor{black}{\footnotesize\textit{* Software default value}}\hfil}%
-      \vspace{4pt}%
+      \vspace{2pt}%
     }{%
-      \vspace{-8pt}%
+      \vspace{-4pt}%
     }%
     \color{osdagGreen}\hrule width\headwidth height 1pt \vspace{6pt}%
   }
@@ -314,7 +326,8 @@ def title_page(m, osdag_logo, org_logo):
 {\Huge \textbf{OsdagBridge}}\\[0.3cm]
 {\large Open Source Software for Steel Girder Bridge Design}\\[1.5cm]
 {\Large Design Report}\\[1.5cm]
-\begin{tabular}{|L{4cm}|L{10cm}|}
+\setlength{\usablew}{\dimexpr\linewidth - \tabcolsep * 4 - \arrayrulewidth * 3\relax}
+\begin{tabular}{|L{\dimexpr 0.28\usablew\relax}|L{\dimexpr 0.72\usablew\relax}|}
 \hline
 \textbf{Project Name} & """ + _tex(m.project_name) + r""" \\
 \hline
@@ -336,6 +349,7 @@ def title_page(m, osdag_logo, org_logo):
 \hline
 \end{tabular}
 \end{titlepage}
+\setcounter{page}{2}
 """
 
 
@@ -811,27 +825,80 @@ from osdagbridge.core.boq.boq_generator import calculate_material_quantities
 # Public entry point
 # ===========================================================================
 
-_FIGURE_MAP = [
-    ('plan',                  'plan.png'),
-    ('cross_section',         'cross_section.png'),
-    ('final_geometry',        'final_geometry.png'),
-    ('longitudinal_elevation','longitudinal_elevation.png'),
-    ('girder_3d',             'girder_3d.png'),
-    ('girder_top',            'girder_top.png'),
-    ('section_preview',       'section_preview.png'),
-    ('stiffener_preview',     'stiffener_preview.png'),
-    ('cb_diagram',            'cb_diagram.png'),
-    ('cb_bracing',            'cb_bracing.png'),
-    ('cb_top_chord',          'cb_top_chord.png'),
-    ('cb_bottom_chord',       'cb_bottom_chord.png'),
-    ('ed_diagram',            'ed_diagram.png'),
-    ('ed_bracing',            'ed_bracing.png'),
-    ('ed_top_chord',          'ed_top_chord.png'),
-    ('ed_bottom_chord',       'ed_bottom_chord.png'),
-    ('bm_envelope',           'bm_envelope.png'),
-    ('sf_envelope',           'sf_envelope.png'),
-    ('defl_ll',               'defl_ll.png'),
-]
+def collect_ur_data(bridge):
+    """
+    Produce canonical utilization ratio (UR) data used by both
+    Table 5.29 and the Section 5.5 UR Summary chart.
+    
+    Returns:
+        dict mapping component name -> float UR (skips components with no data).
+    """
+    ur_map = {}
+    # 1. Girder: max DCR across all girder checks
+    _dr = bridge.output_dict.get("design_results", {}) or {}
+    _pg = _dr.get("per_girder", {}) or {}
+    g_dcrs = []
+    for _g, _gd in _pg.items():
+        if str(_g).startswith("EB"):
+            continue
+        for _c in (_gd.get("checks") or []):
+            if _c.get("dcr") is not None:
+                try:
+                    g_dcrs.append(float(_c.get("dcr")))
+                except (TypeError, ValueError):
+                    pass
+    if g_dcrs:
+        ur_map["Girder"] = max(g_dcrs)
+    else:
+        logger.warning("UR chart: Girder UR data missing — omitting bar")
+
+    # 2. Deck Slab: max of flexure, shear, or any ur_* key
+    _dd = bridge.output_dict.get("deck_design_results", {}) or {}
+    deck_dcrs = []
+    for _k, _v in _dd.items():
+        if str(_k).startswith("ur_") or _k in ("utilization_flexure", "utilization_shear"):
+            try:
+                if _v is not None:
+                    deck_dcrs.append(float(_v))
+            except (TypeError, ValueError):
+                pass
+    if deck_dcrs:
+        ur_map["Deck Slab"] = max(deck_dcrs)
+    else:
+        logger.warning("UR chart: Deck Slab UR data missing — omitting bar")
+
+    # 3. Cross Bracing
+    cb_results = bridge.output_dict.get("crossbracing_design_results", {}) or {}
+    from .executive_summary import _max_member_efficiency
+    cb_ur = _max_member_efficiency(cb_results)
+    if cb_ur is None:
+        val = bridge.output_dict.get("cb_governing_ur")
+        if val is not None:
+            try:
+                cb_ur = float(val)
+            except (TypeError, ValueError):
+                pass
+    if cb_ur is not None:
+        ur_map["Cross Bracing"] = cb_ur
+    else:
+        logger.warning("UR chart: Cross Bracing UR data missing — omitting bar")
+
+    # 4. End Diaphragm
+    ed_results = bridge.output_dict.get("end_diaphragm_design_results", {}) or {}
+    ed_ur = _max_member_efficiency(ed_results)
+    if ed_ur is None:
+        val = bridge.output_dict.get("ed_governing_ur")
+        if val is not None:
+            try:
+                ed_ur = float(val)
+            except (TypeError, ValueError):
+                pass
+    if ed_ur is not None:
+        ur_map["End Diaphragm"] = ed_ur
+    else:
+        logger.warning("UR chart: End Diaphragm UR data missing — omitting bar")
+
+    return ur_map
 
 def generate_report(payload, request):
     # type: (ReportPayload, ReportRequest) -> ReportResult
@@ -899,10 +966,38 @@ def generate_report(payload, request):
             quantities = calculate_material_quantities(payload.inputs, payload.output_dict)
             payload.inputs.update(quantities)
 
-            # ── Assemble LaTeX document (fig_paths now has tmp_dir paths) ──
+            # ── Initialize Bridge Data Bridge ──
             bridge = ReportDataBridge(payload.output_dict, payload.inputs, payload)
             span_m = float(payload.inputs.get(KEY_SPAN, 0) or 0)
 
+            # ── Generate Dynamic Visualizations (Chapters 5 & 7) ──
+            try:
+                # 1. Utilization Ratios Chart for Section 5.5
+                ur_map = collect_ur_data(bridge)
+                if ur_map:
+                    ur_chart_path = os.path.join(tmp_images, 'ur_summary.png')
+                    res_chart = generate_ur_summary_chart(ur_map, ur_chart_path)
+                    if res_chart and os.path.exists(res_chart):
+                        fig_paths['ur_summary'] = ur_chart_path.replace('\\', '/')
+                    else:
+                        logger.error("UR summary chart generation failed to produce output file.")
+                        fig_paths['ur_summary'] = None
+                else:
+                    logger.warning("No UR data available across any component — UR chart omitted.")
+                    fig_paths['ur_summary'] = None
+                
+                # 2. Material Take-off Charts for Chapter 7
+                st_chart_path = os.path.join(tmp_images, 'steel_tonnage.png')
+                conc_chart_path = os.path.join(tmp_images, 'concrete_rebar.png')
+                st_out, conc_out = generate_material_takeoff_charts(payload.inputs, st_chart_path, conc_chart_path)
+                if st_out and os.path.exists(st_out):
+                    fig_paths['steel_tonnage'] = st_chart_path.replace('\\', '/')
+                if conc_out and os.path.exists(conc_out):
+                    fig_paths['concrete_rebar'] = conc_chart_path.replace('\\', '/')
+            except Exception as e:
+                logger.error("Could not generate summary charts: %s", e, exc_info=True)
+
+            # ── Assemble LaTeX document (fig_paths now has tmp_dir paths) ──
             doc_parts = []
             doc_parts.append(preamble(payload.metadata.project_name, payload.metadata.job_number, payload.metadata.report_date, payload.metadata.subtitle or 'Rev 0'))
             doc_parts.append(title_page(payload.metadata, osdag_logo_latex, org_logo_latex))
@@ -924,15 +1019,14 @@ def generate_report(payload, request):
             if 'analysis' in secs:
                 doc_parts.append(ch4_analysis(payload.analysis_summary, fig_paths, bridge, span_m))
             if 'design_checks' in secs:
-                doc_parts.append(ch5_design_checks(payload.design_checks, bridge))
+                doc_parts.append(ch5_design_checks(payload.design_checks, bridge, fig_paths))
             if 'drawings' in secs and payload.options.include_figures:
                 doc_parts.append(ch6_drawings(fig_paths))
 
-            doc_parts.append(ch7_quantities(payload.inputs))
+            doc_parts.append(ch7_quantities(payload.inputs, fig_paths))
 
             mode = str(payload.inputs.get(KEY_DESIGN_MODE, "Optimized")).strip().lower()
             is_custom = mode in {"custom", "customized"}
-        
 
             doc_parts.append(ch8_design_log(payload.log_entries, payload.inputs))
 
@@ -941,20 +1035,18 @@ def generate_report(payload, request):
 
             full_tex = "\n".join(doc_parts)
 
-
-            # NOTE: longtable header repetition is handled per-table in each
-            # chapter file (e.g. \endfirsthead / \endhead).  No automatic
-            # post-processing is applied here to avoid mis-ordering captions
-            # and column headings.
-
             tmp_tex = os.path.join(tmp_dir, request.file_stem + '.tex')
             tmp_pdf = os.path.join(tmp_dir, request.file_stem + '.pdf')
+            tmp_log = os.path.join(tmp_dir, request.file_stem + '.log')
 
             with open(tmp_tex, 'w', encoding='utf-8') as f:
                 f.write(full_tex)
 
-            # Compile twice for TOC and references
-            for _ in range(2):
+            # Compile loop: run pdflatex until log has no rerun warnings (min 3, max 5 passes)
+            min_passes = 3
+            max_passes = 5
+            last_res = None
+            for pass_idx in range(1, max_passes + 1):
                 try:
                     kwargs = {
                         'cwd': tmp_dir,
@@ -966,12 +1058,28 @@ def generate_report(payload, request):
                     if os.name == 'nt':
                         kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
                     
-                    res = subprocess.run(
+                    last_res = subprocess.run(
                         [compiler, '-interaction=nonstopmode', request.file_stem + '.tex'],
                         **kwargs
                     )
                 except Exception as exc:
-                    logger.warning(f"pdflatex run failed: {exc}")
+                    logger.error("pdflatex pass %d failed to execute: %s", pass_idx, exc)
+                    break
+
+                # Inspect log for rerun trigger
+                rerun_needed = False
+                if os.path.exists(tmp_log):
+                    try:
+                        with open(tmp_log, 'r', encoding='utf-8', errors='ignore') as lf:
+                            log_txt = lf.read()
+                            if "Rerun to get" in log_txt or "may have changed" in log_txt:
+                                rerun_needed = True
+                    except Exception:
+                        pass
+
+                if pass_idx >= min_passes and not rerun_needed:
+                    logger.info("pdflatex compilation stabilized after %d passes", pass_idx)
+                    break
 
             if os.path.exists(tmp_tex):
                 shutil.copy2(tmp_tex, tex_path)
@@ -983,9 +1091,9 @@ def generate_report(payload, request):
             return ReportResult(pdf_path=pdf_path, tex_path=tex_path)
 
         logger.error("pdflatex ran but no PDF was produced.")
-        if 'res' in locals():
-            logger.error("pdflatex STDOUT:\n%s", res.stdout.decode('utf-8', 'ignore'))
-            logger.error("pdflatex STDERR:\n%s", res.stderr.decode('utf-8', 'ignore'))
+        if last_res is not None:
+            logger.error("pdflatex STDOUT:\n%s", last_res.stdout.decode('utf-8', 'ignore'))
+            logger.error("pdflatex STDERR:\n%s", last_res.stderr.decode('utf-8', 'ignore'))
         return ReportResult(pdf_path=None, tex_path=tex_path)
 
     except Exception as exc:
